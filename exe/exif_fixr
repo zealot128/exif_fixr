@@ -1,0 +1,12 @@
+#!/usr/bin/env ruby
+
+require "exif_fixr"
+require 'exif_fixr/cli'
+
+help_commands = Thor::HELP_MAPPINGS + ["help"]
+(help_commands & ARGV).each do |cmd|
+  match = ARGV.delete(cmd)
+  ARGV.size > 1 ? ARGV.insert(-2, match) : ARGV.unshift(match)
+end
+
+ExifFixr::Cli.start(ARGV)
