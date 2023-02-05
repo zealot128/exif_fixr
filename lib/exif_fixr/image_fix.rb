@@ -1,3 +1,5 @@
+require "mini_exiftool"
+
 module ExifFixr
   class ImageFix
     attr_reader :file

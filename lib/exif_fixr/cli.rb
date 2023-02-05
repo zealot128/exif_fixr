@@ -5,13 +5,12 @@ module ExifFixr
     package_name "exiffix"
 
     desc "fix *FILES", "fix exif data of all files"
-    # method_option :folder_format, aliases: "-f", default: "YYYY-MM-DD,GEOLOCATION_NAME", desc: "format of the file's folder, to name accordingly"
     method_option :start_from, aliases: "-s", desc: "Skip until this file (to resume after crashes or kills)"
     method_option :geolocation_service,
-      aliases: "-g",
-      default: "nominatim",
-      desc: "geolocation service to use (google, nominatim)" \
-            "\nIf you want to use GoogleMaps, you will need to provide an GEOCODING_API_KEY env variable"
+                  aliases: "-g",
+                  default: "nominatim",
+                  desc: "geolocation service to use (google, nominatim)" \
+                        "\nIf you want to use GoogleMaps, you will need to provide an GEOCODING_API_KEY env variable"
     method_option :dry_run, aliases: "-n", type: :boolean, default: false,
                             desc: "dry run, don't actually change anything"
 
@@ -24,22 +23,10 @@ module ExifFixr
         exit 1
       end
 
-      todo = if options[:start_from]
-               before_count = files.index(options[:start_from])
-               unless before_count
-                 warn "File #{options[:start_from]} not found in list"
-                 exit 1
-               end
-               puts "Skipping #{before_count} files"
-               files.drop_while { |i| i != options[:start_from] }
-             else
-               files
-             end
-
       initialize_geocoder! geolocation_service: options[:geolocation_service]
       folders = {}
       color = Thor::Shell::Color.new
-      todo.each do |file|
+      find_files(files).each do |file|
         folder = Folder.new(file, options[:geolocation_service])
         next if folder.skip?
 
@@ -55,20 +42,46 @@ module ExifFixr
 
     private
 
+    def find_files(files)
+      todo = if options[:start_from]
+               before_count = files.index(options[:start_from])
+               unless before_count
+                 warn "File #{options[:start_from]} not found in list"
+                 exit 1
+               end
+               puts "Skipping #{before_count} files"
+               files.drop_while { |i| i != options[:start_from] }
+             else
+               files
+             end
+
+      todo.flat_map do |file|
+        if File.directory?(file)
+          Dir["#{file}/**/*.{jpg,JPG,jpeg,JPEG}"]
+        else
+          file
+        end
+      end
+    end
+
     def initialize_geocoder!(geolocation_service:)
       cache_store = Geocoder::CacheStore::Generic.new(ActiveSupport::Cache::FileStore.new(ExifFixr.cache_dir), {})
       Geocoder.configure(
-        # street address geocoding service (default :nominatim)
         lookup: geolocation_service.to_sym,
         cache: cache_store,
-        api_key:
-          if ENV["GEOCODING_API_KEY"]
-            ENV["GEOCODING_API_KEY"]
-          else
-            warn "No API key given for #{options[:geolocation_service]}, Performance of Geocoding might be limited"
-            nil
-          end
+        api_key: geocoding_api_key(geolocation_service)
       )
+    end
+
+    def geocoding_api_key(geolocation_service)
+      return if geolocation_service == "nominatim"
+
+      if ENV["GEOCODING_API_KEY"]
+        ENV["GEOCODING_API_KEY"]
+      else
+        warn "No API key given for #{options[:geolocation_service]}, Performance of Geocoding might be limited"
+        nil
+      end
     end
   end
 end
